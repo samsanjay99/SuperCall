@@ -19,7 +19,7 @@ import axios from 'axios'
 
 export default function Dashboard() {
   const { user, logout } = useAuth()
-  const { connected, startCall, incomingCall } = useWebRTC()
+  const { connected, startCall, incomingCall, testTurnServers } = useWebRTC()
   const [targetUid, setTargetUid] = useState('')
   const [callHistory, setCallHistory] = useState([])
   const [loading, setLoading] = useState(false)
@@ -205,6 +205,14 @@ export default function Dashboard() {
                     Connecting to calling service...
                   </p>
                 )}
+
+                {/* Debug: Test TURN servers */}
+                <button
+                  onClick={testTurnServers}
+                  className="w-full text-xs bg-gray-600 hover:bg-gray-700 text-white py-2 px-3 rounded mt-2"
+                >
+                  🧪 Test TURN Servers (Debug)
+                </button>
               </div>
             </div>
           </div>

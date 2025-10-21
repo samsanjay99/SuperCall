@@ -255,28 +255,40 @@ export function WebRTCProvider({ children }) {
   const initializePeerConnection = () => {
     const pc = new RTCPeerConnection({
       iceServers: [
-        // STUN servers for NAT discovery
+        // Multiple STUN servers for better NAT discovery
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
         
-        // Free public TURN servers for media relay
+        // Multiple TURN servers for better reliability
         {
-          urls: 'turn:openrelay.metered.ca:80',
+          urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:80?transport=tcp'],
           username: 'openrelayproject',
           credential: 'openrelayproject'
         },
         {
-          urls: 'turn:openrelay.metered.ca:443',
+          urls: ['turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
           username: 'openrelayproject',
           credential: 'openrelayproject'
         },
+        // Additional free TURN servers for redundancy
         {
-          urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-          username: 'openrelayproject',
-          credential: 'openrelayproject'
+          urls: 'turn:relay1.expressturn.com:3478',
+          username: 'ef3NQZKBLRC2A2E8QK',
+          credential: 'Lqg2XyYQlJQQE9wjhigh'
+        },
+        {
+          urls: 'turn:relay1.expressturn.com:3478?transport=tcp',
+          username: 'ef3NQZKBLRC2A2E8QK',
+          credential: 'Lqg2XyYQlJQQE9wjhigh'
         }
       ],
-      iceCandidatePoolSize: 10
+      iceCandidatePoolSize: 10,
+      iceTransportPolicy: 'all', // Use all available candidates
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require'
     })
 
     // Store call info in the peer connection for ICE candidates
@@ -371,11 +383,25 @@ export function WebRTCProvider({ children }) {
         })
         toast.success('Connected!')
       } else if (pc.iceConnectionState === 'failed') {
-        console.log('❌ ICE connection failed')
-        toast.error('Connection failed - please try again')
+        console.log('❌ ICE connection failed - attempting restart')
+        toast.error('Connection failed - retrying...')
+        
+        // Attempt ICE restart
+        pc.restartIce()
+        
+        // If still failing after 5 seconds, give up
+        setTimeout(() => {
+          if (pc.iceConnectionState === 'failed') {
+            console.log('❌ ICE restart failed')
+            toast.error('Unable to connect - please check your internet connection')
+          }
+        }, 5000)
       } else if (pc.iceConnectionState === 'checking') {
         console.log('🔄 ICE connection checking...')
         setCurrentCall(prev => prev ? { ...prev, status: 'connecting' } : null)
+      } else if (pc.iceConnectionState === 'disconnected') {
+        console.log('⚠️ ICE connection disconnected - attempting reconnect')
+        toast.error('Connection lost - reconnecting...')
       }
     }
 
@@ -389,16 +415,39 @@ export function WebRTCProvider({ children }) {
 
   const startCall = async (targetUid, mediaType = 'video') => {
     try {
+      console.log('📞 Starting call to:', targetUid, 'media:', mediaType)
+      
       if (!ws || !connected) {
+        console.error('❌ WebSocket not connected')
         toast.error('Not connected to calling service')
         return
       }
 
-      // Get user media first
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: mediaType === 'video',
-        audio: true
-      })
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error('❌ getUserMedia not supported')
+        toast.error('Camera/microphone not supported on this device')
+        return
+      }
+
+      // Get user media with mobile-optimized constraints
+      const constraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 44100
+        },
+        video: mediaType === 'video' ? {
+          width: { ideal: 640, max: 1280 },
+          height: { ideal: 480, max: 720 },
+          frameRate: { ideal: 30, max: 30 },
+          facingMode: 'user'
+        } : false
+      }
+      
+      console.log('📱 Requesting media with constraints:', constraints)
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
 
       setLocalStream(stream)
       if (localVideoRef.current) {
@@ -442,8 +491,21 @@ export function WebRTCProvider({ children }) {
       }))
 
     } catch (error) {
-      console.error('Error starting call:', error)
-      toast.error('Failed to start call')
+      console.error('❌ Error starting call:', error)
+      
+      // Specific error messages for different issues
+      if (error.name === 'NotAllowedError') {
+        toast.error('Camera/microphone permission denied')
+      } else if (error.name === 'NotFoundError') {
+        toast.error('No camera/microphone found')
+      } else if (error.name === 'NotSupportedError') {
+        toast.error('Camera/microphone not supported')
+      } else if (error.name === 'OverconstrainedError') {
+        toast.error('Camera/microphone constraints not supported')
+      } else {
+        toast.error(`Failed to start call: ${error.message}`)
+      }
+      
       cleanup()
     }
   }
@@ -452,11 +514,24 @@ export function WebRTCProvider({ children }) {
     if (!incomingCall) return
 
     try {
-      // Get user media
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: incomingCall.media === 'video',
-        audio: true
-      })
+      // Get user media with mobile-optimized constraints
+      const constraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 44100
+        },
+        video: incomingCall.media === 'video' ? {
+          width: { ideal: 640, max: 1280 },
+          height: { ideal: 480, max: 720 },
+          frameRate: { ideal: 30, max: 30 },
+          facingMode: 'user'
+        } : false
+      }
+      
+      console.log('📱 Requesting media for incoming call:', constraints)
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
 
       setLocalStream(stream)
       if (localVideoRef.current) {
@@ -501,8 +576,19 @@ export function WebRTCProvider({ children }) {
       navigate('/call')
 
     } catch (error) {
-      console.error('Error accepting call:', error)
-      toast.error('Failed to accept call')
+      console.error('❌ Error accepting call:', error)
+      
+      // Specific error messages for different issues
+      if (error.name === 'NotAllowedError') {
+        toast.error('Camera/microphone permission denied')
+      } else if (error.name === 'NotFoundError') {
+        toast.error('No camera/microphone found')
+      } else if (error.name === 'NotSupportedError') {
+        toast.error('Camera/microphone not supported')
+      } else {
+        toast.error(`Failed to accept call: ${error.message}`)
+      }
+      
       rejectCall()
     }
   }
@@ -722,6 +808,45 @@ export function WebRTCProvider({ children }) {
     toast.success('Manually connected!')
   }
 
+  // Test TURN server connectivity
+  const testTurnServers = async () => {
+    console.log('🧪 Testing TURN server connectivity...')
+    
+    try {
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          }
+        ]
+      })
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          console.log('🧊 TURN test candidate:', event.candidate.type, event.candidate.protocol)
+          if (event.candidate.type === 'relay') {
+            console.log('✅ TURN server working!')
+            toast.success('TURN servers are working')
+          }
+        }
+      }
+
+      // Create a dummy offer to trigger ICE gathering
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+      
+      setTimeout(() => {
+        pc.close()
+      }, 5000)
+      
+    } catch (error) {
+      console.error('❌ TURN test failed:', error)
+      toast.error('TURN server test failed')
+    }
+  }
+
   const value = {
     connected,
     currentCall,
@@ -737,7 +862,8 @@ export function WebRTCProvider({ children }) {
     endCall,
     toggleMute,
     toggleVideo,
-    forceConnect // For debugging
+    forceConnect, // For debugging
+    testTurnServers // For testing TURN connectivity
   }
 
   return (
