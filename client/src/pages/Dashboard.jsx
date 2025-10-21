@@ -16,6 +16,7 @@ import {
 import toast from 'react-hot-toast'
 import axios from 'axios'
 import PermissionGuide from '../components/PermissionGuide'
+import PermissionBanner from '../components/PermissionBanner'
 
 
 export default function Dashboard() {
@@ -25,9 +26,21 @@ export default function Dashboard() {
   const [callHistory, setCallHistory] = useState([])
   const [loading, setLoading] = useState(false)
   const [showPermissionGuide, setShowPermissionGuide] = useState(false)
+  const [showPermissionBanner, setShowPermissionBanner] = useState(true)
 
   useEffect(() => {
     fetchCallHistory()
+    
+    // Listen for permission granted event
+    const handlePermissionsGranted = () => {
+      setShowPermissionBanner(false)
+    }
+    
+    window.addEventListener('permissionsGranted', handlePermissionsGranted)
+    
+    return () => {
+      window.removeEventListener('permissionsGranted', handlePermissionsGranted)
+    }
   }, [])
 
   const fetchCallHistory = async () => {
@@ -130,6 +143,14 @@ export default function Dashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Permission Banner */}
+        {showPermissionBanner && (
+          <PermissionBanner
+            onRequestPermissions={() => requestPermissions('video')}
+            onDismiss={() => setShowPermissionBanner(false)}
+          />
+        )}
+        
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Profile & Call Section */}
           <div className="lg:col-span-2 space-y-6">
@@ -292,10 +313,10 @@ export default function Dashboard() {
       </div>
 
 
-    </div>
-  )
-}      
-{/* Permission Guide Modal */}
+      {/* Permission Guide Modal */}
       {showPermissionGuide && (
         <PermissionGuide onClose={() => setShowPermissionGuide(false)} />
       )}
+    </div>
+  )
+}

@@ -20,6 +20,11 @@ export function WebRTCProvider({ children }) {
   const [ws, setWs] = useState(null)
   const [connected, setConnected] = useState(false)
   const [currentCall, setCurrentCall] = useState(null)
+  
+  // Update ref whenever currentCall changes
+  useEffect(() => {
+    currentCallRef.current = currentCall
+  }, [currentCall])
   const [incomingCall, setIncomingCall] = useState(null)
   const [localStream, setLocalStream] = useState(null)
   const [remoteStream, setRemoteStream] = useState(null)
@@ -30,6 +35,7 @@ export function WebRTCProvider({ children }) {
   const remoteVideoRef = useRef(null)
   const ringtoneInterval = useRef(null)
   const audioContext = useRef(null)
+  const currentCallRef = useRef(null)
 
   // Check permissions on app load
   useEffect(() => {
@@ -77,9 +83,12 @@ export function WebRTCProvider({ children }) {
     const token = localStorage.getItem('accessToken')
     if (!token) return
 
-    // Use same-origin WebSocket connection
+    // Use WebSocket connection - in development, connect directly to backend
+    const isDev = import.meta.env.DEV
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}`
+    const wsUrl = isDev 
+      ? 'ws://localhost:3000'  // Direct connection to backend in development
+      : `${protocol}//${window.location.host}`  // Same-origin in production
     console.log('🔌 Connecting to WebSocket:', wsUrl)
     const websocket = new WebSocket(wsUrl)
     
@@ -93,6 +102,7 @@ export function WebRTCProvider({ children }) {
 
     websocket.onmessage = (event) => {
       const data = JSON.parse(event.data)
+      console.log('🔥 RAW WebSocket message received:', data)
       handleWebSocketMessage(data)
     }
 
@@ -116,6 +126,7 @@ export function WebRTCProvider({ children }) {
 
   const handleWebSocketMessage = async (data) => {
     console.log('📨 WebSocket message:', data.type, data)
+    console.log('📨 Current call state when message received:', currentCall)
 
     switch (data.type) {
       case 'auth.success':
@@ -144,6 +155,22 @@ export function WebRTCProvider({ children }) {
         if (location.pathname !== '/call') {
           navigate('/call')
         }
+        
+        // Set a timeout to handle cases where rejection message is missed
+        setTimeout(() => {
+          setCurrentCall(current => {
+            if (current && current.callId === data.callId && current.status === 'ringing') {
+              console.log('⏰ Call timeout - still ringing after 30 seconds')
+              toast.error('Call timeout - no response')
+              cleanup()
+              if (location.pathname === '/call') {
+                navigate('/dashboard')
+              }
+              return null
+            }
+            return current
+          })
+        }, 30000) // 30 second timeout
         break
 
       case 'call.incoming':
@@ -210,16 +237,31 @@ export function WebRTCProvider({ children }) {
         break
 
       case 'call.rejected':
-        if (currentCall?.callId === data.callId) {
-          setCurrentCall(null)
-          toast.error('Call rejected')
-          cleanup()
-          
-          // Navigate back to dashboard
-          if (location.pathname === '/call') {
-            navigate('/dashboard')
-          }
+        console.log('📞 Call rejected message received:', data)
+        console.log('📞 Current call state:', currentCall)
+        console.log('📞 Current call ref:', currentCallRef.current)
+        console.log('📞 Current location:', location.pathname)
+        
+        // FORCE clear any call state - be very aggressive
+        console.log('📞 FORCE clearing call due to rejection')
+        setCurrentCall(null)
+        currentCallRef.current = null
+        toast.error('Call declined')
+        cleanup()
+        
+        // FORCE navigate back to dashboard if on call page
+        if (location.pathname === '/call') {
+          console.log('📞 FORCE navigating to dashboard')
+          navigate('/dashboard')
         }
+        
+        // Also force a page refresh as last resort if still on call page after 1 second
+        setTimeout(() => {
+          if (location.pathname === '/call') {
+            console.log('📞 EMERGENCY: Still on call page, forcing refresh')
+            window.location.href = '/dashboard'
+          }
+        }, 1000)
         break
 
       case 'call.offer':
@@ -932,6 +974,9 @@ export function WebRTCProvider({ children }) {
       
       console.log('✅ Permissions granted successfully')
       toast.success('Permissions granted! You can now make calls.')
+      
+      // Trigger a custom event to notify components
+      window.dispatchEvent(new CustomEvent('permissionsGranted'))
       
       return true
     } catch (error) {

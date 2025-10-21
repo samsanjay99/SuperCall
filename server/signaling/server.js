@@ -278,11 +278,15 @@ class SignalingServer {
     // Notify caller
     const callerConnection = this.connections.get(call.caller);
     if (callerConnection) {
+      console.log(`📞 Sending rejection to caller ${call.caller} for call ${callId}`);
       this.send(callerConnection.ws, {
         type: 'call.rejected',
         callId,
         reason
       });
+      console.log(`📞 Rejection message sent successfully`);
+    } else {
+      console.log(`❌ Caller ${call.caller} not connected - cannot send rejection`);
     }
 
     // Clean up
