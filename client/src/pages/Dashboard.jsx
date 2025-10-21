@@ -15,14 +15,16 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import axios from 'axios'
+import PermissionGuide from '../components/PermissionGuide'
 
 
 export default function Dashboard() {
   const { user, logout } = useAuth()
-  const { connected, startCall, incomingCall, testTurnServers } = useWebRTC()
+  const { connected, startCall, incomingCall, testTurnServers, requestPermissions } = useWebRTC()
   const [targetUid, setTargetUid] = useState('')
   const [callHistory, setCallHistory] = useState([])
   const [loading, setLoading] = useState(false)
+  const [showPermissionGuide, setShowPermissionGuide] = useState(false)
 
   useEffect(() => {
     fetchCallHistory()
@@ -206,10 +208,26 @@ export default function Dashboard() {
                   </p>
                 )}
 
+                {/* Permission request buttons */}
+                <div className="flex space-x-2 mt-2">
+                  <button
+                    onClick={() => requestPermissions('video')}
+                    className="flex-1 text-sm bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded"
+                  >
+                    🔐 Enable Permissions
+                  </button>
+                  <button
+                    onClick={() => setShowPermissionGuide(true)}
+                    className="flex-1 text-sm bg-gray-600 hover:bg-gray-700 text-white py-2 px-3 rounded"
+                  >
+                    📖 Help
+                  </button>
+                </div>
+
                 {/* Debug: Test TURN servers */}
                 <button
                   onClick={testTurnServers}
-                  className="w-full text-xs bg-gray-600 hover:bg-gray-700 text-white py-2 px-3 rounded mt-2"
+                  className="w-full text-xs bg-gray-600 hover:bg-gray-700 text-white py-2 px-3 rounded mt-1"
                 >
                   🧪 Test TURN Servers (Debug)
                 </button>
@@ -276,4 +294,8 @@ export default function Dashboard() {
 
     </div>
   )
-}
+}      
+{/* Permission Guide Modal */}
+      {showPermissionGuide && (
+        <PermissionGuide onClose={() => setShowPermissionGuide(false)} />
+      )}

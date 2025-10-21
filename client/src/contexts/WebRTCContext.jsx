@@ -31,6 +31,33 @@ export function WebRTCProvider({ children }) {
   const ringtoneInterval = useRef(null)
   const audioContext = useRef(null)
 
+  // Check permissions on app load
+  useEffect(() => {
+    const checkInitialPermissions = async () => {
+      try {
+        const permissions = await Promise.all([
+          navigator.permissions.query({ name: 'microphone' }),
+          navigator.permissions.query({ name: 'camera' })
+        ])
+        
+        console.log('🔐 Initial permissions:', {
+          microphone: permissions[0].state,
+          camera: permissions[1].state
+        })
+        
+        if (permissions[0].state === 'denied' || permissions[1].state === 'denied') {
+          toast.error('Camera/microphone permissions needed for calls. Click "Enable Camera & Microphone" button.')
+        }
+      } catch (error) {
+        console.log('⚠️ Permission check not supported on this browser')
+      }
+    }
+    
+    if (user) {
+      checkInitialPermissions()
+    }
+  }, [user])
+
   // WebSocket connection
   useEffect(() => {
     if (user && !ws) {
@@ -430,6 +457,26 @@ export function WebRTCProvider({ children }) {
         return
       }
 
+      // Check current permissions before requesting media
+      try {
+        const permissions = await Promise.all([
+          navigator.permissions.query({ name: 'microphone' }),
+          navigator.permissions.query({ name: 'camera' })
+        ])
+        
+        console.log('🔐 Current permissions:', {
+          microphone: permissions[0].state,
+          camera: permissions[1].state
+        })
+        
+        if (permissions[0].state === 'denied' || (mediaType === 'video' && permissions[1].state === 'denied')) {
+          toast.error('Please enable camera/microphone permissions in your browser settings')
+          return
+        }
+      } catch (permError) {
+        console.log('⚠️ Permission check not supported, proceeding with media request')
+      }
+
       // Get user media with mobile-optimized constraints
       const constraints = {
         audio: {
@@ -447,7 +494,35 @@ export function WebRTCProvider({ children }) {
       }
       
       console.log('📱 Requesting media with constraints:', constraints)
-      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      
+      let stream
+      try {
+        // Try with full constraints first
+        stream = await navigator.mediaDevices.getUserMedia(constraints)
+      } catch (error) {
+        console.log('⚠️ Full constraints failed, trying fallback:', error.name)
+        
+        // Fallback: try with basic constraints
+        const fallbackConstraints = {
+          audio: true,
+          video: mediaType === 'video' ? true : false
+        }
+        
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints)
+          console.log('✅ Fallback constraints worked')
+        } catch (fallbackError) {
+          console.log('❌ Fallback also failed, trying audio only')
+          
+          // Last resort: audio only
+          if (mediaType === 'video') {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+            toast.error('Video not available, using audio only')
+          } else {
+            throw fallbackError
+          }
+        }
+      }
 
       setLocalStream(stream)
       if (localVideoRef.current) {
@@ -531,7 +606,35 @@ export function WebRTCProvider({ children }) {
       }
       
       console.log('📱 Requesting media for incoming call:', constraints)
-      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      
+      let stream
+      try {
+        // Try with full constraints first
+        stream = await navigator.mediaDevices.getUserMedia(constraints)
+      } catch (error) {
+        console.log('⚠️ Full constraints failed, trying fallback:', error.name)
+        
+        // Fallback: try with basic constraints
+        const fallbackConstraints = {
+          audio: true,
+          video: incomingCall.media === 'video' ? true : false
+        }
+        
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints)
+          console.log('✅ Fallback constraints worked')
+        } catch (fallbackError) {
+          console.log('❌ Fallback also failed, trying audio only')
+          
+          // Last resort: audio only
+          if (incomingCall.media === 'video') {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+            toast.error('Video not available, using audio only')
+          } else {
+            throw fallbackError
+          }
+        }
+      }
 
       setLocalStream(stream)
       if (localVideoRef.current) {
@@ -808,6 +911,44 @@ export function WebRTCProvider({ children }) {
     toast.success('Manually connected!')
   }
 
+  // Request permissions explicitly
+  const requestPermissions = async (mediaType = 'video') => {
+    try {
+      console.log('🔐 Requesting permissions for:', mediaType)
+      
+      // Show user-friendly message
+      toast.success('Please allow camera and microphone access when prompted')
+      
+      const constraints = {
+        audio: true,
+        video: mediaType === 'video'
+      }
+      
+      // Request permissions by getting media stream
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      
+      // Stop the stream immediately (we just wanted permissions)
+      stream.getTracks().forEach(track => track.stop())
+      
+      console.log('✅ Permissions granted successfully')
+      toast.success('Permissions granted! You can now make calls.')
+      
+      return true
+    } catch (error) {
+      console.error('❌ Permission request failed:', error)
+      
+      if (error.name === 'NotAllowedError') {
+        toast.error('Camera/microphone access denied. Please enable in browser settings.')
+      } else if (error.name === 'NotFoundError') {
+        toast.error('No camera/microphone found on this device.')
+      } else {
+        toast.error(`Permission error: ${error.message}`)
+      }
+      
+      return false
+    }
+  }
+
   // Test TURN server connectivity
   const testTurnServers = async () => {
     console.log('🧪 Testing TURN server connectivity...')
@@ -863,7 +1004,8 @@ export function WebRTCProvider({ children }) {
     toggleMute,
     toggleVideo,
     forceConnect, // For debugging
-    testTurnServers // For testing TURN connectivity
+    testTurnServers, // For testing TURN connectivity
+    requestPermissions // For requesting permissions
   }
 
   return (
