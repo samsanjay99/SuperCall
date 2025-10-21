@@ -21,7 +21,7 @@ app.use(helmet({
 
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://supercall-frontend.onrender.com', 'https://supercall.onrender.com'] 
+    ? ['https://supercall.onrender.com'] 
     : ['http://localhost:3000', 'http://localhost:5173'],
   credentials: true
 }));

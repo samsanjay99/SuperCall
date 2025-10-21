@@ -83,12 +83,11 @@ export function WebRTCProvider({ children }) {
     const token = localStorage.getItem('accessToken')
     if (!token) return
 
-    // Use WebSocket connection - in development, connect directly to backend
-    const isDev = import.meta.env.DEV
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = isDev 
-      ? 'ws://localhost:3000'  // Direct connection to backend in development
-      : `${protocol}//${window.location.host}`  // Same-origin in production
+    // Use WebSocket connection from environment variables
+    const wsUrl = import.meta.env.VITE_WS_URL || 
+      (import.meta.env.DEV 
+        ? 'ws://localhost:3000'  // Development fallback
+        : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`)  // Production fallback
     console.log('🔌 Connecting to WebSocket:', wsUrl)
     const websocket = new WebSocket(wsUrl)
     
