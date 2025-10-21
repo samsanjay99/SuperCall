@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
+const http = require('http');
 require('dotenv').config();
 
 const pool = require('./database/connection');
@@ -10,10 +11,14 @@ const userRoutes = require('./routes/users');
 const callRoutes = require('./routes/calls');
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(helmet());
+// Middleware - Disable CSP in production for now to fix API calls
+app.use(helmet({
+  contentSecurityPolicy: false
+}));
+
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? ['https://supercall-frontend.onrender.com', 'https://supercall.onrender.com'] 
@@ -72,10 +77,15 @@ app.use((error, req, res, next) => {
   });
 });
 
+// Initialize WebSocket signaling on the same server
+const SignalingServer = require('./signaling/server');
+const signalingServer = new SignalingServer(server);
+
 // Start server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
+  console.log(`🔌 WebSocket signaling integrated`);
   console.log(`🔧 Environment: ${process.env.NODE_ENV}`);
 });
 

@@ -5,9 +5,17 @@ const pool = require('../database/connection');
 require('dotenv').config();
 
 class SignalingServer {
-  constructor(port = 3001) {
-    this.port = port;
-    this.wss = new WebSocket.Server({ port });
+  constructor(serverOrPort = 3001) {
+    if (typeof serverOrPort === 'number') {
+      // Standalone mode
+      this.port = serverOrPort;
+      this.wss = new WebSocket.Server({ port: this.port });
+    } else {
+      // Integrated mode with HTTP server
+      this.server = serverOrPort;
+      this.wss = new WebSocket.Server({ server: this.server });
+    }
+    
     this.connections = new Map(); // uid -> { ws, user }
     this.activeCalls = new Map(); // callId -> { caller, callee, status }
     
@@ -15,7 +23,11 @@ class SignalingServer {
   }
 
   setupServer() {
-    console.log(`🔌 WebSocket signaling server starting on port ${this.port}`);
+    if (this.port) {
+      console.log(`🔌 WebSocket signaling server starting on port ${this.port}`);
+    } else {
+      console.log(`🔌 WebSocket signaling integrated with HTTP server`);
+    }
     
     this.wss.on('connection', (ws) => {
       console.log('New WebSocket connection');
@@ -39,7 +51,11 @@ class SignalingServer {
       });
     });
 
-    console.log(`✅ Signaling server running on ws://localhost:${this.port}`);
+    if (this.port) {
+      console.log(`✅ Signaling server running on ws://localhost:${this.port}`);
+    } else {
+      console.log(`✅ Signaling server integrated`);
+    }
   }
 
   async handleMessage(ws, data) {

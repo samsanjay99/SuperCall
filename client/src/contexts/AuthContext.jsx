@@ -37,8 +37,7 @@ export function AuthProvider({ children }) {
         return
       }
 
-      const apiUrl = import.meta.env.VITE_API_URL || ''
-      const response = await axios.get(`${apiUrl}/api/users/me`)
+      const response = await axios.get('/api/users/me')
       setUser(response.data)
     } catch (error) {
       console.error('Auth check failed:', error)
@@ -52,8 +51,7 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || ''
-      const response = await axios.post(`${apiUrl}/api/auth/login`, { email, password })
+      const response = await axios.post('/api/auth/login', { email, password })
       const { user: userData, tokens } = response.data
 
       localStorage.setItem('accessToken', tokens.accessToken)
@@ -72,8 +70,7 @@ export function AuthProvider({ children }) {
 
   const register = async (email, password, displayName) => {
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || ''
-      const response = await axios.post(`${apiUrl}/api/auth/signup`, {
+      const response = await axios.post('/api/auth/signup', {
         email,
         password,
         displayName
@@ -104,8 +101,7 @@ export function AuthProvider({ children }) {
 
   const updateProfile = async (updates) => {
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || ''
-      const response = await axios.patch(`${apiUrl}/api/users/me`, updates)
+      const response = await axios.patch('/api/users/me', updates)
       setUser(prev => ({ ...prev, ...response.data.user }))
       toast.success('Profile updated successfully')
       return { success: true }

@@ -50,7 +50,10 @@ export function WebRTCProvider({ children }) {
     const token = localStorage.getItem('accessToken')
     if (!token) return
 
-    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001'
+    // Use same-origin WebSocket connection
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = `${protocol}//${window.location.host}`
+    console.log('🔌 Connecting to WebSocket:', wsUrl)
     const websocket = new WebSocket(wsUrl)
     
     websocket.onopen = () => {

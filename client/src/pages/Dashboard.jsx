@@ -30,8 +30,7 @@ export default function Dashboard() {
 
   const fetchCallHistory = async () => {
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || ''
-      const response = await axios.get(`${apiUrl}/api/calls`)
+      const response = await axios.get('/api/calls')
       setCallHistory(response.data.calls)
     } catch (error) {
       console.error('Failed to fetch call history:', error)
